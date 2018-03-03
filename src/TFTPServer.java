@@ -2,12 +2,12 @@ import java.io.IOException;
 import java.net.*;
 import java.nio.ByteBuffer;
 
-public class TFTPServer 
+public class TFTPServer
 {
 	public static final int TFTPPORT = 4970;
 	public static final int BUFSIZE = 516;
-	public static final String READDIR = "/src/read/"; //custom address at your PC
-	public static final String WRITEDIR = "/src/write/"; //custom address at your PC
+	public static final String READDIR = "/src/dir/read"; //custom address at your PC
+	public static final String WRITEDIR = "/src/dir/write"; //custom address at your PC
 	// OP codes
 	public static final int OP_RRQ = 1;
 	public static final int OP_WRQ = 2;
@@ -16,90 +16,93 @@ public class TFTPServer
 	public static final int OP_ERR = 5;
 
 	public static void main(String[] args) {
-		if (args.length > 0) 
+		if (args.length > 0)
 		{
 			System.err.printf("usage: java %s\n", TFTPServer.class.getCanonicalName());
 			System.exit(1);
 		}
 		//Starting the server
-		try 
+		try
 		{
 			TFTPServer server= new TFTPServer();
 			server.start();
 		}
-		catch (SocketException e) 
+		catch (SocketException e)
 			{e.printStackTrace();}
 	}
-	
-	private void start() throws SocketException 
+
+	private void start() throws SocketException
 	{
+
 		byte[] buf= new byte[BUFSIZE];
-		
+
 		// Create socket
 		DatagramSocket socket= new DatagramSocket(null);
-		
-		// Create local bind point 
+
+		// Create local bind point
 		SocketAddress localBindPoint= new InetSocketAddress(TFTPPORT);
 		socket.bind(localBindPoint);
+		System.out.println(socket.getInetAddress());
+		System.out.println(socket.getLocalAddress());
+		System.out.println(socket.getLocalSocketAddress());
 
 		System.out.printf("Listening at port %d for new requests\n", TFTPPORT);
 
-		// Loop to handle client requests 
-		while (true) 
-		{        
-			
+		// Loop to handle client requests
+		while (true)
+		{
+
 			final InetSocketAddress clientAddress = receiveFrom(socket, buf);
-			
+
 			// If clientAddress is null, an error occurred in receiveFrom()
-			if (clientAddress == null) 
+			if (clientAddress == null)
 				continue;
 
 			final StringBuffer requestedFile= new StringBuffer();
 			final int reqtype = ParseRQ(buf, requestedFile);
 
-			new Thread() 
+			new Thread()
 			{
-				public void run() 
+				public void run()
 				{
-					try 
+					try
 					{
 						DatagramSocket sendSocket= new DatagramSocket(0);
-
 						// Connect to client
-						sendSocket.connect(clientAddress);						
-						
+						sendSocket.connect(clientAddress);
+
 						System.out.printf("%s request for %s from %s using port %d\n",
 								(reqtype == OP_RRQ)?"Read":"Write",
-								clientAddress.getHostName(), clientAddress.getPort());  
-								
+								clientAddress.getHostName(), clientAddress.getPort());
+
 						// Read request
-						if (reqtype == OP_RRQ) 
-						{      
+						if (reqtype == OP_RRQ)
+						{
 							requestedFile.insert(0, READDIR);
 							HandleRQ(sendSocket, requestedFile.toString(), OP_RRQ);
 						}
 						// Write request
-						else 
-						{                       
+						else
+						{
 							requestedFile.insert(0, WRITEDIR);
-							HandleRQ(sendSocket,requestedFile.toString(),OP_WRQ);  
+							HandleRQ(sendSocket,requestedFile.toString(),OP_WRQ);
 						}
 						sendSocket.close();
-					} 
-					catch (SocketException e) 
+					}
+					catch (SocketException e)
 						{e.printStackTrace();}
 				}
 			}.start();
 		}
 	}
-	
+
 	/**
-	 * Reads the first block of data, i.e., the request for an action (read or write).
-	 * @param socket (socket to read from)
-	 * @param buf (where to store the read data)
+	 * Reads the first block of data, i.e., the request for an action (dir.read or dir.write).
+	 * @param socket (socket to dir.read from)
+	 * @param buf (where to store the dir.read data)
 	 * @return socketAddress (the socket address of the client)
 	 */
-	private InetSocketAddress receiveFrom(DatagramSocket socket, byte[] buf) 
+	private InetSocketAddress receiveFrom(DatagramSocket socket, byte[] buf)
 	{
 
 		DatagramPacket receivedPack = new DatagramPacket(buf, buf.length );
@@ -115,66 +118,80 @@ public class TFTPServer
 
 	/**
 	 * Parses the request in buf to retrieve the type of request and requestedFile
-	 * 
+	 *
 	 * @param buf (received request)
-	 * @param requestedFile (name of file to read/write)
+	 * @param requestedFile (name of file to dir.read/dir.write)
 	 * @return opcode (request type: RRQ or WRQ)
 	 */
-	private int ParseRQ(byte[] buf, StringBuffer requestedFile) 
+	private int ParseRQ(byte[] buf, StringBuffer requestedFile)
 	{
 		// See "TFTP Formats" in TFTP specification for the RRQ/WRQ request contents
 		ByteBuffer buffer =  ByteBuffer.wrap(buf);
 
 		int opcode = buffer.getInt();
-		String toAdd= new String(buf,2,buf.length,-2;)
+		String toAdd= new String(buf,2,buf.length,-2);
 		requestedFile.append(toAdd);
 		return opcode;
 	}
 
 	/**
-	 * Handles RRQ and WRQ requests 
-	 * 
+	 * Handles RRQ and WRQ requests
+	 *
 	 * @param sendSocket (socket used to send/receive packets)
-	 * @param requestedFile (name of file to read/write)
+	 * @param requestedFile (name of file to dir.read/dir.write)
 	 * @param opcode (RRQ or WRQ)
 	 */
-	private void HandleRQ(DatagramSocket sendSocket, String requestedFile, int opcode) 
-	{		
+	private void HandleRQ(DatagramSocket sendSocket, String requestedFile, int opcode)
+	{
 		if(opcode == OP_RRQ)
 		{
 			// See "TFTP Formats" in TFTP specification for the DATA and ACK packet contents
 
 
-			boolean result = send_DATA_receive_ACK(params);
+			//boolean result = send_DATA_receive_ACK(params);
 		}
-		else if (opcode == OP_WRQ) 
+		else if (opcode == OP_WRQ)
 		{
-			boolean result = receive_DATA_send_ACK(params);
+			//boolean result = receive_DATA_send_ACK(params);
 		}
-		else 
+		else
 		{
 			System.err.println("Invalid request. Sending an error packet.");
 			// See "TFTP Formats" in TFTP specification for the ERROR packet contents
-			send_ERR(params);
+		//	send_ERR(params);
 			return;
-		}		
+		}
 	}
-	
+
 	/**
 	To be implemented
-	*/
+
 	private boolean send_DATA_receive_ACK(params) {
+		//       DATA packet
+		//| 2bytes   |	2bytes |  n bytes |
+		//|----------|---------|----------|
+		//|  OpCode  |  Block# |   Data   |
+
 		return true;
 	}
-	
+
 	private boolean receive_DATA_send_ACK(params) {
+		//       ACK packet
+		//| 2bytes   |	2bytes |
+		//|----------|---------|
+		//|  OpCode  |  Block# |
+
 		return true;
 	}
-	
+
 	private void send_ERR(params) {
+		//          error packet
+		// |2bytes |   2bytes   |   n bytes  |   1byte |
+		// |-------|------------|------------|---------|
+		// |   05  |  ErrorCode |   ErrMsg   |     0   |
 
 	}
-	
+	 */
 }
 
 
