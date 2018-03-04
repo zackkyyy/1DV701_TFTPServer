@@ -1,1 +1,47 @@
-A file for testing
+Listening at port 4970 for new requests
+The opcode is 1
+The requested file is read.txt
+Read request for localhost from 53376 using port
+1!!!!!!!!!!!!!!!
+18the lenght of the file
+FILE LAST TRANSMISSION
+The opcode is 1
+The requested file is read.txt
+Read request for localhost from 53376 using port
+1!!!!!!!!!!!!!!!
+errupted by signal 2: SIGIListening at port 4970 for new requests
+                          The opcode is 1
+                          The requested file is read.txt
+                          Read request for localhost from 53376 using port
+                          1!!!!!!!!!!!!!!!
+                          18the lenght of the file
+                          FILE LAST TRANSMISSION
+                          The opcode is 1
+                          The requested file is read.txt
+                          Read request for localhost from 53376 using port
+                          1!!!!!!!!!!!!!!!
+                          errupted by signal 2: SIGINT)
+                          Listening at port 4970 for new requests
+                          The opcode is 1
+                          The requested file is read.txt
+                          Read request for localhost from 53376 using port
+                          1!!!!!!!!!!!!!!!
+                          18the lenght of the file
+                          FILE LAST TRANSMISSION
+                          The opcode is 1
+                          The requested file is read.txt
+                          Read request for localhost from 53376 using port
+                          1!!!!!!!!!!!!!!!
+                          errupted by signal 2: SIGINT)
+                          Listening at port 4970 for new requests
+                          The opcode is 1
+                          The requested file is read.txt
+                          Read request for localhost from 53376 using port
+                          1!!!!!!!!!!!!!!!
+                          18the lenght of the file
+                          FILE LAST TRANSMISSION
+                          The opcode is 1
+                          The requested file is read.txt
+                          Read request for localhost from 53376 using port
+                          1!!!!!!!!!!!!!!!
+                          errupted by signal 2: SIGINT)NT)
