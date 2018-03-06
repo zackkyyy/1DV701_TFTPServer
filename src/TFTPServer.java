@@ -1,7 +1,4 @@
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
-import java.io.IOException;
+import java.io.*;
 import java.net.*;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
@@ -19,6 +16,7 @@ public class TFTPServer {
     public static final int OP_ERR = 5;
     public static final int MAXTRANSMITSIZE = 512;
     public static final int ACKPACKETSIZE = 4;
+    private DatagramPacket receivedDataPacket;
 
     public static void main(String[] args) {
         if (args.length > 0) {
@@ -118,9 +116,8 @@ public class TFTPServer {
     private int ParseRQ(byte[] buf, StringBuffer requestedFile) {
         // See "TFTP Formats" in TFTP specification for the RRQ/WRQ request contents
         ByteBuffer buffer = ByteBuffer.wrap(buf);
-
         int nameFinish = 0;
-
+        StringBuffer mode = new StringBuffer();
         for (int i = 1; i < buf.length; i++) {
             /*
             in the read write request packet |opcode|filename|0| so this loop stops
@@ -130,12 +127,21 @@ public class TFTPServer {
                 nameFinish = i;
                 break;   // break the loop as we got the index where the file name end
             }
+
+        }
+        mode.append(new String (buf,nameFinish+1,nameFinish-5));
+        if(!mode.equals("octet")){
+            System.out.println("mode is not implemented");
         }
         int opcode = buffer.getShort();
         System.out.println("The opcode is " + opcode);
         requestedFile.append(new String(buf, 2, nameFinish - 2));
         System.out.println("The requested file is " + requestedFile);
         return opcode;
+
+
+
+
     }
 
     /**
@@ -170,7 +176,7 @@ public class TFTPServer {
                         result = send_DATA_receive_ACK(sendSocket, i + 1, Arrays.copyOfRange(buffer, i * MAXTRANSMITSIZE, (i + 1) * MAXTRANSMITSIZE));
                         retransmitCnt = 0;
                     } else {
-                        System.out.println("File with size " + file.length() + " has been transmitted");
+                        System.out.println("File with size " + file + " has been transmitted");
                         result = send_DATA_receive_ACK(sendSocket, i + 1, Arrays.copyOfRange(buffer, i * MAXTRANSMITSIZE, (int) file.length()));
                         retransmitCnt = 0;
                     }
@@ -192,18 +198,86 @@ public class TFTPServer {
 
             }
         } else if (opcode == OP_WRQ) {
+            try {
 
-            //boolean result = receive_DATA_send_ACK(params);
-        } else {
-            System.err.println("Invalid request. Sending an error packet.");
-            // See "TFTP Formats" in TFTP specification for the ERROR packet contents
-            //	send_ERR(params);
-            return;
+                File file = new File(requestedFile);
+
+                // Check if file exists
+                if (!file.exists()) {
+                    FileOutputStream fos = new FileOutputStream(file);
+                    int retransmitCnt = 0;
+                    boolean fin = false;
+                    int i = 0;
+                    // send an initiate ACK to star the communication
+                    sendACK(sendSocket, i);
+
+
+                    while (!fin) {
+
+                        boolean result = true;
+
+                        // start sending the data in packet of size 512
+                        result = receive_DATA_send_ACK(sendSocket, i + 1);
+
+                        //add packets content without the 4 first bytes to the file
+                        fos.write(receivedDataPacket.getData(), 4, receivedDataPacket.getLength() - 4);
+
+
+                        //last packet to send
+                        if (receivedDataPacket.getLength() < MAXTRANSMITSIZE + 4) {
+                            fin = true;
+                            System.out.println("\nFile with size " + file.length()+ " has been transmitted");
+                            fos.close();
+                        } else
+                            System.out.println("\nTransmission number " + i + " has been sent");
+                        retransmitCnt = 0;
+
+                        if (!result) {
+                            // if the data is not sent successfully
+                            if (retransmitCnt == 5) {
+                                // MAX allowed retransmissions is 5
+                                send_ERR(sendSocket, 0, "Terminated. Max allowed re-transmission is 5");
+                                break;
+                            }
+                            i--;
+                            retransmitCnt++;
+                        }
+                        i++;
+                    }
+                } else {
+                    // else the file is already exist, we throw error number 6
+                    file.delete(); // this to be deleted before submitting
+
+                    send_ERR(sendSocket, 6, "File already exists");
+                    return;
+                }
+            } catch (FileNotFoundException e) {
+                e.printStackTrace();
+            } catch (IOException e) {
+                e.printStackTrace();
+
+            }
+
         }
 
     }
 
-
+    /**
+     * This method is to be used in Write request while sending an initiate ACk
+     * @param sendSocket
+     * @param i the packet number
+     * @return  true when the process is completed
+     * @throws IOException
+     */
+    public boolean sendACK(DatagramSocket sendSocket, int i) throws IOException {
+        short block = (short) i;
+        ByteBuffer packet = ByteBuffer.allocate(4);
+        packet.putShort((short) OP_ACK);
+        packet.putShort(block);
+        sendSocket.send(new DatagramPacket(packet.array(), packet.position()));
+        System.out.println("ACK is sent");
+        return true;
+    }
     // To be implemented
     private boolean send_DATA_receive_ACK(DatagramSocket sendSocket, int i, byte[] bytes) throws IOException {
         //       DATA packet
@@ -213,15 +287,18 @@ public class TFTPServer {
 
         short block = (short) i;
 
-        ByteBuffer packet = ByteBuffer.allocate(bytes.length + 4);
+        ByteBuffer packet = ByteBuffer.allocate(bytes.length + 4);  // the size is the data size + 4 bytes fir block and opcode
 
+        //  create the packet by putting the data
         packet.putShort((short) OP_DAT);
         packet.putShort(block);
         packet.put(bytes);
-
+        // Send the packet
         sendSocket.send(new DatagramPacket(packet.array(), packet.position()));
         System.out.println("Data is sent");
+        // create a new array to receive  the ACK
         byte[] recACK = new byte[ACKPACKETSIZE];  // ack packet is 4 bytes length
+
         DatagramPacket receivedACKPacket = new DatagramPacket(recACK, ACKPACKETSIZE);
         sendSocket.setSoTimeout(150);
         sendSocket.receive(receivedACKPacket);
@@ -239,14 +316,46 @@ public class TFTPServer {
         return true;
     }
 
-    /*
-    private boolean receive_DATA_send_ACK(params) {
+
+    private boolean receive_DATA_send_ACK(DatagramSocket sendSocket , int i) throws IOException {
    //       ACK packet
    //| 2bytes   |	2bytes |
    //|----------|---------|
    //|  OpCode  |  Block# |
-   return true;
-   }*/
+
+        byte[] data = new byte[516];  // ack packet is 4 bytes length
+        receivedDataPacket = new DatagramPacket(data, 516);
+        sendSocket.setSoTimeout(150);
+        sendSocket.receive(receivedDataPacket);
+        System.out.print("packet received: Size " + receivedDataPacket.getLength() + " Number: ");
+
+
+        byte[] recPacketInformation = receivedDataPacket.getData();
+        // wrap the received information to get
+        ByteBuffer wrap = ByteBuffer.wrap(recPacketInformation);
+
+        int opCode = wrap.getShort();
+        int blockNr = wrap.getShort();  // get the packet number
+        System.out.println(blockNr);
+        // check if it is Data packet first
+        if (opCode != OP_DAT && opCode != OP_ERR) {
+            send_ERR(sendSocket, 4, "Illegal TFTP operation.");
+        }
+        // check if the
+        else if (blockNr != i) {
+            System.out.println("wrong packet so no Ack was sent");
+            throw new SocketException();
+        } else {
+            // send ACK
+            ByteBuffer AckPacket = ByteBuffer.allocate(4);
+            AckPacket.putShort((short) OP_ACK);
+            AckPacket.putShort((short) blockNr);
+            DatagramPacket Ack = new DatagramPacket(AckPacket.array(), ACKPACKETSIZE);
+            sendSocket.send(Ack);
+            System.out.println("ACK is sent .." + blockNr);
+        }
+        return true;
+   }
     private void send_ERR(DatagramSocket sendSocket, int errorNumber, String errorMsg) throws IOException {
         //          error packet
         // |2bytes |   2bytes   |   n bytes  |   1byte |
