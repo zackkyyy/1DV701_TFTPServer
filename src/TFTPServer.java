@@ -80,6 +80,8 @@ public class TFTPServer {
                         sendSocket.close();
                     } catch (SocketException e) {
                         e.printStackTrace();
+                    } catch (IOException e) {
+                        e.printStackTrace();
                     }
                 }
             }.start();
@@ -130,9 +132,9 @@ public class TFTPServer {
 
         }
         StringBuffer mode = new StringBuffer();
-        mode.append( new String(buf,nameFinish+1,5));
+        mode.append(new String(buf, nameFinish + 1, 5));
         System.out.println(mode.toString() + " the mode");
-        if(!mode.toString().equals("octet")){
+        if (!mode.toString().equals("octet")) {
             System.out.println("mode is not implemented");
             throw new IllegalArgumentException("transfer mode not supported!");
         }
@@ -141,8 +143,6 @@ public class TFTPServer {
         requestedFile.append(new String(buf, 2, nameFinish - 2));
         System.out.println("The requested file is " + requestedFile);
         return opcode;
-
-
 
 
     }
@@ -154,7 +154,7 @@ public class TFTPServer {
      * @param requestedFile (name of file to dir.read/dir.write)
      * @param opcode        (RRQ or WRQ)
      */
-    private void HandleRQ(DatagramSocket sendSocket, String requestedFile, int opcode) {
+    private void HandleRQ(DatagramSocket sendSocket, String requestedFile, int opcode) throws IOException {
 
         if (opcode == OP_RRQ) {
             try {
@@ -216,18 +216,15 @@ public class TFTPServer {
                     while (!fin) {
 
                         boolean result = true;
-
                         // start sending the data in packet of size 512
                         result = receive_DATA_send_ACK(sendSocket, i + 1);
-
                         //add packets content without the 4 first bytes to the file
                         fos.write(receivedDataPacket.getData(), 4, receivedDataPacket.getLength() - 4);
-
 
                         //last packet to send
                         if (receivedDataPacket.getLength() < MAXTRANSMITSIZE + 4) {
                             fin = true;
-                            System.out.println("\nFile with size " + file.length()+ " has been transmitted");
+                            System.out.println("\nFile with size " + file.length() + " has been transmitted");
                             fos.close();
                         } else
                             System.out.println("\nTransmission number " + i + " has been sent");
@@ -245,22 +242,20 @@ public class TFTPServer {
                         }
                         i++;
 
-
                     }
                 } else {
                     // else the file is already exist, we throw error number 6
-                   file.delete(); // this to be deleted before submitting
                     send_ERR(sendSocket, 6, "File already exists");
                     return;
                 }
 
                 File dir = new File(WRITEDIR);
-                long filesSize=0;
+                long filesSize = 0;
                 long maxFolderSize = 100000000;   // set the maximum size the folder can have
                 for (File files : dir.listFiles()) {
                     filesSize += files.length();   // calculate the size of the exist folders
                 }
-                if (maxFolderSize-filesSize < receivedDataPacket.getLength()){
+                if (maxFolderSize - filesSize < receivedDataPacket.getLength()) {
                     System.out.println("Disk is full");
                     send_ERR(sendSocket, 3, "Disk full or allocation exceeded.");
                     return;
@@ -268,8 +263,7 @@ public class TFTPServer {
             } catch (FileNotFoundException e) {
                 e.printStackTrace();
             } catch (IOException e) {
-                e.printStackTrace();
-
+                send_ERR(sendSocket,2,"Access violation");
             }
 
         }
@@ -278,9 +272,10 @@ public class TFTPServer {
 
     /**
      * This method is to be used in Write request while sending an initiate ACk
+     *
      * @param sendSocket
-     * @param i the packet number
-     * @return  true when the process is completed
+     * @param i          the packet number
+     * @return true when the process is completed
      * @throws IOException
      */
     public boolean sendACK(DatagramSocket sendSocket, int i) throws IOException {
@@ -289,16 +284,17 @@ public class TFTPServer {
         packet.putShort((short) OP_ACK);
         packet.putShort(block);
         sendSocket.send(new DatagramPacket(packet.array(), packet.position()));
-        System.out.println("ACK is sent: Block number is "+block );
+        System.out.println("ACK is sent: Block number is " + block);
         return true;
     }
-    // To be implemented
+
     private boolean send_DATA_receive_ACK(DatagramSocket sendSocket, int i, byte[] bytes) throws IOException {
         //       DATA packet
         //|  2bytes   |	2bytes |  n bytes |
         //|----------|---------|----------|
         //|  OpCode  |  Block# |   Data   |
         try {
+
             short block = (short) i;
 
             ByteBuffer packet = ByteBuffer.allocate(bytes.length + 4);  // the size is the data size + 4 bytes fir block and opcode
@@ -314,10 +310,11 @@ public class TFTPServer {
             byte[] recACK = new byte[ACKPACKETSIZE];  // ack packet is 4 bytes length
 
             DatagramPacket receivedACKPacket = new DatagramPacket(recACK, ACKPACKETSIZE);
-            sendSocket.setSoTimeout(150);
+
+            sendSocket.setSoTimeout(150);  // a time out or RTT which is the time we wait for the ACK
             sendSocket.receive(receivedACKPacket);
             System.out.println("ACK is received");
-
+            // wrap the received ack packet to get its information
             ByteBuffer wrap = ByteBuffer.wrap(recACK);
             short opCode = wrap.getShort();
             short blockNr = wrap.getShort();
@@ -326,21 +323,26 @@ public class TFTPServer {
             } else if (blockNr != block) {  // check if the received packet belongs to the right data sent
                 return false;
             }
-        }catch (IOException e) { // when unknown error happens
+        } catch (SocketTimeoutException e ){
+            System.out.println("Time out");
+        } catch (IOException e) { // when unknown error happens
             send_ERR(sendSocket, 2, "Access violation.");
+            System.out.println("IO problem that might be an Access violation");
+
         }
+
         return true;
     }
 
 
-    private boolean receive_DATA_send_ACK(DatagramSocket sendSocket , int i) throws IOException {
-   //       ACK packet
-   //| 2bytes   |	2bytes |
-   //|----------|---------|
-   //|  OpCode  |  Block# |
-
-            byte[] data = new byte[516];  // ack packet is 4 bytes length
-            receivedDataPacket = new DatagramPacket(data, 516);
+    private boolean receive_DATA_send_ACK(DatagramSocket sendSocket, int i) throws IOException {
+        //       ACK packet
+        //| 2bytes   |	2bytes |
+        //|----------|---------|
+        //|  OpCode  |  Block# |
+        try {
+            byte[] data = new byte[BUFSIZE];
+            receivedDataPacket = new DatagramPacket(data, BUFSIZE);
             sendSocket.setSoTimeout(150);
             sendSocket.receive(receivedDataPacket);
             System.out.print("packet received: Size " + receivedDataPacket.getLength() + " Number: ");
@@ -349,7 +351,6 @@ public class TFTPServer {
             byte[] recPacketInformation = receivedDataPacket.getData();
             // wrap the received information to get
             ByteBuffer wrap = ByteBuffer.wrap(recPacketInformation);
-
             int opCode = wrap.getShort();
             int blockNr = wrap.getShort();  // get the packet number
             System.out.println(blockNr);
@@ -358,31 +359,41 @@ public class TFTPServer {
                 send_ERR(sendSocket, 4, "Illegal TFTP operation.");
                 throw new SocketTimeoutException();
             }
+            // when the client use different port while sending the packet
             if (receivedDataPacket.getPort() != sendSocket.getPort()) {
+                // disconnect first and create a new connection with new port to send the message error
+                sendSocket.disconnect();
+                sendSocket.connect(new InetSocketAddress(sendSocket.getInetAddress(), receivedDataPacket.getPort()));
                 send_ERR(sendSocket, 5, "Unknown transfer ID");
-
             }
             // check blockNr of the sennt ACK is not the same of the packet ID
             else if (blockNr != i) {
                 send_ERR(sendSocket, 5, "Unknown transfer ID");
+                System.out.println("Data packet number and ACK block number does not match");
                 throw new SocketException();
             } else {
-                // send ACK
+                // send ACK when the data packet is received
                 sendACK(sendSocket, blockNr);
 
             }
-
+        }catch (SocketTimeoutException e) {
+            System.out.println("Time out");
+        } catch
+         (IOException e) { // when unknown error happens
+            send_ERR(sendSocket, 2, "Access violation.");
+        }
         return true;
-   }
+    }
+
     private void send_ERR(DatagramSocket sendSocket, int errorNumber, String errorMsg) throws IOException {
         //          error packet
         // |2bytes |   2bytes   |   n bytes  |   1byte |
         // |-------|------------|------------|---------|
         // |   05  |  ErrorCode |   ErrMsg   |     0   |
 
-        byte[] buf = errorMsg.getBytes();
-
-        ByteBuffer packet = ByteBuffer.allocate(errorMsg.getBytes().length + 5);
+        byte[] buf = errorMsg.getBytes();   // add the error message to a buffer
+        ByteBuffer packet = ByteBuffer.allocate(errorMsg.getBytes().length + 4);  // message length + 4 (2 bytes opCode adn 2 bytes ErrorCode)
+        // put the opcode then error number then the message in the bytebuffer to send as a datagram packet
         packet.putShort((short) OP_ERR);
         packet.putShort((short) errorNumber);
         packet.put(buf);
