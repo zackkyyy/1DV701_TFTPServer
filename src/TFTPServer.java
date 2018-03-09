@@ -73,9 +73,12 @@ public class TFTPServer {
                             HandleRQ(sendSocket, requestedFile.toString(), OP_RRQ);
                         }
                         // Write request
-                        else {
+                        else if (reqtype==OP_WRQ) {
                             requestedFile.insert(0, WRITEDIR);
                             HandleRQ(sendSocket, requestedFile.toString(), OP_WRQ);
+                        }
+                        else{
+                            send_ERR(sendSocket, 4, "Illegal TFTP operation.");
                         }
                         sendSocket.close();
                     } catch (SocketException e) {
@@ -162,7 +165,7 @@ public class TFTPServer {
                 // See "TFTP Formats" in TFTP specification for the DATA and ACK packet contents
                 File file = new File(requestedFile);
                 if (!file.exists()) {
-                    send_ERR(sendSocket, 1, "File not found.");
+                    send_ERR(sendSocket, 1, "File not found");
                     return;
                 }
                 FileInputStream fileIS;
@@ -318,8 +321,8 @@ public class TFTPServer {
             ByteBuffer wrap = ByteBuffer.wrap(recACK);
             short opCode = wrap.getShort();
             short blockNr = wrap.getShort();
-            if (opCode != OP_ACK) {  // check if the received packet is ACK packet
-                send_ERR(sendSocket, 5, "Unknown transfer ID");
+            if (opCode != OP_ACK && opCode!=OP_ERR) {  // check if the received packet is ACK packet
+                send_ERR(sendSocket, 4, "Illegal TFTP operation.");
             } else if (blockNr != block) {  // check if the received packet belongs to the right data sent
                 return false;
             }
